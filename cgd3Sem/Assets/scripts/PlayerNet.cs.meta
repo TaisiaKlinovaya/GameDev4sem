@@ -3,7 +3,12 @@ guid: a9df15a7ec395ab42a9145420c93ff5f
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - redMaterial: {fileID: 2100000, guid: fd9b4738140c5e948b135a013901b785, type: 2}
+  - greenMaterial: {fileID: 2100000, guid: e84495ad89cb1f04ab186e9de0adb996, type: 2}
+  - blueMaterial: {fileID: 2100000, guid: eb5df614b3506104aa48bf436c5aae50, type: 2}
+  - orbPrefab: {fileID: 4438555144550244542, guid: 73e2bee5d529b8e47bba2f56163c3aea, type: 3}
+  - pillarPrefab: {fileID: 4656913078988035994, guid: c2beaef85c450c34cb4afcddef13f914, type: 3}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

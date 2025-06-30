@@ -104,17 +104,16 @@ public class Player : NetworkBehaviour
         team.Value = selectedTeam;
     }
 
-    // Orb spawnen (kostet 3 Punkte)
     [ServerRpc(RequireOwnership = false)]
     private void TrySpawnOrbServerRpc(ServerRpcParams rpcParams = default)
     {
         if (points.Value >= 3)
         {
             points.Value -= 3;
-
             Vector3 spawnPos = transform.position + transform.forward * 2f + Vector3.up;
             var orb = Instantiate(orbPrefab, spawnPos, Quaternion.identity);
-            orb.GetComponent<NetworkObject>().Spawn();
+            NetworkObject orbNetworkObject = orb.GetComponent<NetworkObject>();
+            orbNetworkObject.SpawnWithOwnership(rpcParams.Receive.SenderClientId); // Wichtig!
         }
     }
 
