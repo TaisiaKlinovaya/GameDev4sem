@@ -1,7 +1,5 @@
-using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 public enum Team
 {
@@ -21,10 +19,12 @@ public class Player : NetworkBehaviour
 
     private Renderer playerRenderer;
 
-    private NetworkVariable<Team> team = new NetworkVariable<Team>(Team.Red, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<Team> team = new NetworkVariable<Team>(
+        Team.Red, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // Punktestand synchronisiert, jeder Spieler startet mit 10 Punkten
-    private NetworkVariable<int> points = new NetworkVariable<int>(10, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    // Punkte bleiben NetworkVariable, aber keine direkte Punktevergabe hier!
+    private NetworkVariable<int> points = new NetworkVariable<int>(
+        10, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     public GameObject orbPrefab;
     public GameObject pillarPrefab;
@@ -41,23 +41,25 @@ public class Player : NetworkBehaviour
         if (!IsOwner) return;
 
         inputMovement.x = Input.GetAxis("Horizontal");
-        inputMovement.y = Input.GetAxis("Vertical");
+        inputMovement.y = Input.GetAxis("Vertical"); // z statt y, da 3D
+
         transform.position += inputMovement * Time.deltaTime * speed;
 
-        if (!IsServer || IsHost)
+        if (IsServer)
         {
-            MoveServerRpc(transform.position);
+            MoveClientRpc(transform.position);
         }
 
-        // Beispiel Input zum Spawnen:
+        // Spawn Eingaben
         if (Input.GetKeyDown(KeyCode.O)) TrySpawnOrbServerRpc();
         if (Input.GetKeyDown(KeyCode.P)) TrySpawnPillarServerRpc();
     }
-
-    [ServerRpc]
-    private void MoveServerRpc(Vector3 newPos)
+    void OnGUI()
     {
-        MoveClientRpc(newPos);
+        if (IsOwner)
+        {
+            GUI.Label(new Rect(10, 10, 200, 20), "Punkte: " + points.Value);
+        }
     }
 
     [ClientRpc]
@@ -85,7 +87,6 @@ public class Player : NetworkBehaviour
         }
     }
 
-    // Team setzen wie vorher
     public void SetTeam(Team selectedTeam)
     {
         if (IsServer)
@@ -110,38 +111,58 @@ public class Player : NetworkBehaviour
         if (points.Value >= 3)
         {
             points.Value -= 3;
-            Vector3 spawnPos = transform.position + transform.forward * 2f + Vector3.up;
+            Vector3 spawnPos = transform.position + Vector3.up * 0.5f;
             var orb = Instantiate(orbPrefab, spawnPos, Quaternion.identity);
-            NetworkObject orbNetworkObject = orb.GetComponent<NetworkObject>();
-            orbNetworkObject.SpawnWithOwnership(rpcParams.Receive.SenderClientId); // Wichtig!
+
+            var networkObj = orb.GetComponent<NetworkObject>();
+            if (networkObj != null)
+            {
+                networkObj.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
+            }
+
+            var interactable = orb.GetComponent<OrbAndPillar>();
+            if (interactable != null)
+            {
+                interactable.SetTeam(team.Value);
+            }
         }
     }
 
-    // Pillar spawnen (kostet 2 Punkte)
     [ServerRpc(RequireOwnership = false)]
     private void TrySpawnPillarServerRpc(ServerRpcParams rpcParams = default)
     {
         if (points.Value >= 2)
         {
             points.Value -= 2;
-
-            Vector3 spawnPos = transform.position + transform.right * 2f + Vector3.up;
+            Vector3 spawnPos = transform.position + Vector3.up * 0.5f;
             var pillar = Instantiate(pillarPrefab, spawnPos, Quaternion.identity);
-            pillar.GetComponent<NetworkObject>().Spawn();
+
+            var networkObj = pillar.GetComponent<NetworkObject>();
+            if (networkObj != null)
+            {
+                networkObj.Spawn();
+            }
+
+            var interactable = pillar.GetComponent<OrbAndPillar>();
+            if (interactable != null)
+            {
+                interactable.SetTeam(team.Value);
+            }
         }
     }
-
-    // Optional: Punktestand öffentlich lesbar
     public int GetPoints()
     {
         return points.Value;
     }
 
-    void OnGUI()
+    public Team GetTeam()
     {
-        if (IsOwner)
-        {
-            GUI.Label(new Rect(10, 10, 200, 20), "Punkte: " + points.Value);
-        }
+        return team.Value;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void AddPointsServerRpc(int amount)
+    {
+        points.Value += amount;
     }
 }

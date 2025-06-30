@@ -14,6 +14,8 @@ public class GameManager : MonoBehaviour
         if (GUILayout.Button("Team Grün")) selectedTeam = Team.Green;
         if (GUILayout.Button("Team Blau")) selectedTeam = Team.Blue;
 
+
+
         GUILayout.Label("Aktuelles Team: " + selectedTeam);
 
         if (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
