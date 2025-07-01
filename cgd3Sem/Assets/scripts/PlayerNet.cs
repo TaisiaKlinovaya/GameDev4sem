@@ -11,49 +11,159 @@ public enum Team
 public class Player : NetworkBehaviour
 {
     [SerializeField] private float speed = 2f;
+    [SerializeField] private float rotationSpeed = 5f;
     private Vector3 inputMovement;
 
     [SerializeField] private Material redMaterial;
     [SerializeField] private Material greenMaterial;
     [SerializeField] private Material blueMaterial;
 
+    [Header("Camera Settings")]
+    [SerializeField] private GameObject playerCamera;
+    [SerializeField] private float cameraDistance = 5f;
+    [SerializeField] private float cameraHeight = 2f;
+    [SerializeField] private float cameraRotationSpeed = 100f;
+
+    private float currentCameraAngle = 180f;
+    private bool isRotatingCamera = false;
+    private Vector2 lastMousePosition;
+
     private Renderer playerRenderer;
 
     private NetworkVariable<Team> team = new NetworkVariable<Team>(
         Team.Red, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // Punkte bleiben NetworkVariable, aber keine direkte Punktevergabe hier!
     private NetworkVariable<int> points = new NetworkVariable<int>(
         10, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     public GameObject orbPrefab;
     public GameObject pillarPrefab;
 
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+
+        // Get the renderer component
+        playerRenderer = GetComponentInChildren<Renderer>();
+
+        // Apply initial material
+        if (playerRenderer != null)
+        {
+            ApplyMaterial(team.Value);
+        }
+
+        // Subscribe to team changes
+        team.OnValueChanged += OnTeamChanged;
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        base.OnNetworkDespawn();
+        team.OnValueChanged -= OnTeamChanged;
+    }
+
+    private void OnTeamChanged(Team previous, Team current)
+    {
+        if (playerRenderer != null)
+        {
+            ApplyMaterial(current);
+        }
+    }
+
     void Start()
     {
-        playerRenderer = GetComponent<Renderer>();
-        team.OnValueChanged += (oldVal, newVal) => ApplyMaterial(newVal);
-        ApplyMaterial(team.Value);
+        if (playerCamera == null)
+        {
+            playerCamera = GetComponentInChildren<Camera>(true).gameObject;
+        }
+
+        if (IsOwner && playerCamera != null)
+        {
+            SetupPlayerCamera();
+        }
+        else if (playerCamera != null)
+        {
+            // Deaktiviere Kamera für andere Spieler
+            playerCamera.SetActive(false);
+        }
     }
 
     void Update()
     {
         if (!IsOwner) return;
 
-        inputMovement.x = Input.GetAxis("Horizontal");
-        inputMovement.y = Input.GetAxis("Vertical"); // z statt y, da 3D
+        HandleMovement();
+        HandleCameraRotation();
 
-        transform.position += inputMovement * Time.deltaTime * speed;
+        if (Input.GetKeyDown(KeyCode.O)) TrySpawnOrbServerRpc();
+        if (Input.GetKeyDown(KeyCode.P)) TrySpawnPillarServerRpc();
+    }
+
+    private void HandleMovement()
+    {
+        inputMovement.x = Input.GetAxis("Horizontal");
+        inputMovement.z = Input.GetAxis("Vertical");
+
+        Vector3 normalizedMovement = inputMovement.normalized;
+
+        transform.position += normalizedMovement * Time.deltaTime * speed;
 
         if (IsServer)
         {
             MoveClientRpc(transform.position);
         }
-
-        // Spawn Eingaben
-        if (Input.GetKeyDown(KeyCode.O)) TrySpawnOrbServerRpc();
-        if (Input.GetKeyDown(KeyCode.P)) TrySpawnPillarServerRpc();
     }
+
+
+    private void HandleCameraRotation()
+    {
+        if (Input.GetMouseButtonDown(0))
+        {
+            isRotatingCamera = true;
+            lastMousePosition = Input.mousePosition;
+        }
+        if (Input.GetMouseButtonUp(0))
+        {
+            isRotatingCamera = false;
+        }
+
+        if (isRotatingCamera)
+        {
+            Vector2 currentMousePosition = Input.mousePosition;
+            float deltaX = currentMousePosition.x - lastMousePosition.x;
+
+            currentCameraAngle += deltaX * cameraRotationSpeed * Time.deltaTime;
+            UpdateCameraPosition();
+
+            lastMousePosition = currentMousePosition;
+        }
+    }
+
+    private void SetupPlayerCamera()
+    {
+        if (playerCamera == null) return;
+
+        // Kamera initial positionieren
+        playerCamera.SetActive(true);
+        UpdateCameraPosition();
+
+        playerCamera.transform.LookAt(transform.position + Vector3.up * cameraHeight);
+    }
+
+    private void UpdateCameraPosition()
+    {
+        if (playerCamera == null) return;
+
+        Vector3 offset = new Vector3(
+            Mathf.Sin(currentCameraAngle * Mathf.Deg2Rad) * cameraDistance,
+            cameraHeight,
+            Mathf.Cos(currentCameraAngle * Mathf.Deg2Rad) * cameraDistance
+        );
+
+        playerCamera.transform.position = transform.position + offset;
+        playerCamera.transform.LookAt(transform.position + Vector3.up * cameraHeight);
+    }
+
     void OnGUI()
     {
         if (IsOwner)
@@ -73,6 +183,8 @@ public class Player : NetworkBehaviour
 
     private void ApplyMaterial(Team team)
     {
+        if (playerRenderer == null) return;
+
         switch (team)
         {
             case Team.Red:
@@ -150,6 +262,7 @@ public class Player : NetworkBehaviour
             }
         }
     }
+
     public int GetPoints()
     {
         return points.Value;
