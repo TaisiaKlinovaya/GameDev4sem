@@ -1,5 +1,5 @@
-using Unity.Netcode;
 using UnityEngine;
+using Unity.Netcode;
 
 public class CatSpawner : NetworkBehaviour
 {
@@ -7,11 +7,19 @@ public class CatSpawner : NetworkBehaviour
     public GameObject cat2Prefab;
     public float spawnInterval = 5f;
 
-    private float timer = 0f;
+    private float timer;
+    public bool isGameRunning = true;
 
-    void Update()
+    private Camera mainCamera;
+
+    private void Start()
     {
-        if (!IsServer) return;
+        mainCamera = Camera.main;
+    }
+
+    private void Update()
+    {
+        if (!IsServer || !isGameRunning) return;
 
         timer += Time.deltaTime;
         if (timer >= spawnInterval)
@@ -21,19 +29,37 @@ public class CatSpawner : NetworkBehaviour
         }
     }
 
-    void SpawnRandomCat()
+    private void SpawnRandomCat()
     {
-        GameObject prefabToSpawn = Random.value < 0.5f ? cat1Prefab : cat2Prefab;
+        GameObject catPrefab = Random.value < 0.5f ? cat1Prefab : cat2Prefab;
+        Vector3 randomPosition = GetRandomScreenPosition();
 
-        Vector3 position = GetRandomScreenPosition();
-        GameObject cat = Instantiate(prefabToSpawn, position, Quaternion.identity);
-        cat.GetComponent<NetworkObject>().Spawn();
+        GameObject catInstance = Instantiate(catPrefab, randomPosition, Quaternion.identity);
+        catInstance.GetComponent<NetworkObject>().Spawn();
     }
 
-    Vector3 GetRandomScreenPosition()
+    private Vector3 GetRandomScreenPosition()
     {
-        Vector2 screenPos = new Vector2(Random.Range(0.2f, 0.8f), Random.Range(0.2f, 0.8f));
-        Vector3 worldPos = Camera.main.ViewportToWorldPoint(new Vector3(screenPos.x, screenPos.y, 10f));
-        return worldPos;
+        float x = Random.Range(0.1f, 0.9f);
+        float y = Random.Range(0.1f, 0.9f);
+        Vector3 screenPos = new Vector3(x * Screen.width, y * Screen.height, 10f);
+
+        return mainCamera.ScreenToWorldPoint(screenPos);
+    }
+
+    public void StopSpawning()
+    {
+        isGameRunning = false;
+    }
+
+    public void DespawnAllCats()
+    {
+        foreach (var cat in GameObject.FindGameObjectsWithTag("Cat"))
+        {
+            if (cat.TryGetComponent<NetworkObject>(out var netObj))
+                netObj.Despawn();
+            else
+                Destroy(cat);
+        }
     }
 }

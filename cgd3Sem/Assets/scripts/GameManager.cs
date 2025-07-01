@@ -4,6 +4,12 @@ using Unity.Netcode;
 public class GameManager : MonoBehaviour
 {
     private Team selectedTeam = Team.Red;
+    private CatSpawner catSpawner;
+
+    private void Start()
+    {
+        catSpawner = FindObjectOfType<CatSpawner>();
+    }
 
     private void OnGUI()
     {
@@ -41,8 +47,16 @@ public class GameManager : MonoBehaviour
             GUILayout.Label($"Local Client ID: {NetworkManager.Singleton.LocalClientId}");
             if (GUILayout.Button("Shutdown"))
             {
+                if (catSpawner != null && NetworkManager.Singleton.IsServer)
+                {
+                    catSpawner.StopSpawning();
+                    catSpawner.DespawnAllCats();
+                }
+
                 NetworkManager.Singleton.Shutdown();
+                UnityEngine.SceneManagement.SceneManager.LoadScene(0);
             }
+
         }
 
         GUILayout.EndArea();

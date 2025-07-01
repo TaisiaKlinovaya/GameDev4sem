@@ -1,6 +1,4 @@
-using System.Collections;
 using System.Collections.Generic;
-using System.Globalization;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -10,23 +8,34 @@ public class MegaCat : NetworkBehaviour
 
     private void OnMouseDown()
     {
-        if (!IsOwner) return;
+        if (!NetworkManager.Singleton.IsConnectedClient) return;
 
         ulong clientId = NetworkManager.Singleton.LocalClientId;
         ClickServerRpc(clientId);
     }
 
-    [ServerRpc]
+    [ServerRpc(RequireOwnership = false)]
     private void ClickServerRpc(ulong clientId)
     {
-        var player = NetworkManager.Singleton.SpawnManager.GetPlayerNetworkObject(clientId)?.GetComponent<Player>();
+        var playerObj = NetworkManager.Singleton.SpawnManager.GetPlayerNetworkObject(clientId);
+        if (playerObj == null) return;
+
+        var player = playerObj.GetComponent<Player>();
         if (player == null) return;
 
-        teamsClicked.Add(player.GetTeam());
+        Team team = player.GetTeam();
 
-        if (teamsClicked.Count >= 2)
+        // Nur wenn das Team noch nicht geklickt hat
+        if (!teamsClicked.Contains(team))
         {
-            GetComponent<NetworkObject>().Despawn(true);
+            teamsClicked.Add(team);
+            Debug.Log($"Team {team} hat MegaCat geklickt.");
+
+            if (teamsClicked.Count >= 2)
+            {
+                Debug.Log("MegaCat wird despawned (2 verschiedene Teams haben geklickt)!");
+                GetComponent<NetworkObject>().Despawn(true);
+            }
         }
     }
 }

@@ -1,26 +1,31 @@
-using System.Collections;
 using System.Collections.Generic;
-using System.Globalization;
 using Unity.Netcode;
 using UnityEngine;
 
 public class MiniCat : NetworkBehaviour
 {
-    private int clickCount = 0;
+    private NetworkVariable<int> clickCount = new NetworkVariable<int>(0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
 
     private void OnMouseDown()
     {
-        if (!IsOwner) return;
+        if (!NetworkManager.Singleton.IsConnectedClient) return;
 
-        ClickServerRpc();
+        ulong localClientId = NetworkManager.Singleton.LocalClientId;
+        RequestClickServerRpc(localClientId);
     }
 
-    [ServerRpc]
-    private void ClickServerRpc()
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestClickServerRpc(ulong clientId)
     {
-        clickCount++;
-        if (clickCount >= 3)
+        clickCount.Value++;
+
+        Debug.Log($"MiniCat wurde geklickt. Aktuelle Klicks: {clickCount.Value}");
+
+        if (clickCount.Value >= 3)
         {
+            Debug.Log("MiniCat wird despawned nach 3 Klicks!");
             GetComponent<NetworkObject>().Despawn(true);
         }
     }
