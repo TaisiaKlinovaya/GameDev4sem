@@ -10,9 +10,17 @@ public enum Team
 
 public class Player : NetworkBehaviour
 {
+    [Header("Movement Settings")]
     [SerializeField] private float speed = 2f;
-    [SerializeField] private float rotationSpeed = 5f;
+    [SerializeField] private float leanAmount = 3f; 
+    [SerializeField] private float leanSpeed = 10f;
+    [SerializeField] private float stepFrequency = 0.7f;
+
     private Vector3 inputMovement;
+    private float currentLean = 0f;
+    private float leanTimer = 0f;
+    private bool isLeaningRight = true;
+    private float movementMagnitude = 0f;
 
     [SerializeField] private Material redMaterial;
     [SerializeField] private Material greenMaterial;
@@ -43,16 +51,11 @@ public class Player : NetworkBehaviour
     {
         base.OnNetworkSpawn();
 
-        // Get the renderer component
         playerRenderer = GetComponentInChildren<Renderer>();
-
-        // Apply initial material
         if (playerRenderer != null)
         {
             ApplyMaterial(team.Value);
         }
-
-        // Subscribe to team changes
         team.OnValueChanged += OnTeamChanged;
     }
 
@@ -83,7 +86,6 @@ public class Player : NetworkBehaviour
         }
         else if (playerCamera != null)
         {
-            // Deaktiviere Kamera für andere Spieler
             playerCamera.SetActive(false);
         }
     }
@@ -94,6 +96,7 @@ public class Player : NetworkBehaviour
 
         HandleMovement();
         HandleCameraRotation();
+        HandleLeanAnimation();
 
         if (Input.GetKeyDown(KeyCode.O)) TrySpawnOrbServerRpc();
         if (Input.GetKeyDown(KeyCode.P)) TrySpawnPillarServerRpc();
@@ -103,17 +106,42 @@ public class Player : NetworkBehaviour
     {
         inputMovement.x = Input.GetAxis("Horizontal");
         inputMovement.z = Input.GetAxis("Vertical");
+        movementMagnitude = inputMovement.magnitude;
 
         Vector3 normalizedMovement = inputMovement.normalized;
-
         transform.position += normalizedMovement * Time.deltaTime * speed;
 
-        if (IsServer)
-        {
-            MoveClientRpc(transform.position);
-        }
+        if (IsServer) MoveClientRpc(transform.position);
     }
 
+    private void HandleLeanAnimation()
+    {
+        bool isMoving = movementMagnitude > 0.1f;
+
+        if (isMoving)
+        {
+            leanTimer += Time.deltaTime;
+            if (leanTimer >= stepFrequency)
+            {
+                isLeaningRight = !isLeaningRight;
+                leanTimer = 0f;
+            }
+
+            // Sanfte Neigung basierend auf Bewegungsgeschwindigkeit
+            float targetLean = isLeaningRight ? leanAmount : -leanAmount;
+            targetLean *= Mathf.Clamp01(movementMagnitude);
+
+            currentLean = Mathf.Lerp(currentLean, targetLean, leanSpeed * Time.deltaTime);
+        }
+        else
+        {
+            // Zurück zur aufrechten Position
+            currentLean = Mathf.Lerp(currentLean, 0f, leanSpeed * 2 * Time.deltaTime);
+            leanTimer = 0f;
+        }
+
+        transform.rotation = Quaternion.Euler(0f, transform.rotation.eulerAngles.y, currentLean);
+    }
 
     private void HandleCameraRotation()
     {
@@ -143,10 +171,8 @@ public class Player : NetworkBehaviour
     {
         if (playerCamera == null) return;
 
-        // Kamera initial positionieren
         playerCamera.SetActive(true);
         UpdateCameraPosition();
-
         playerCamera.transform.LookAt(transform.position + Vector3.up * cameraHeight);
     }
 
